@@ -1,4 +1,5 @@
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
  LMS (Linux Management Server) Administration Scripts
 
  - maintain a (potentially self updating) inventory of your servers
@@ -8,6 +9,7 @@
 
  Author: Jon Short
  Date:   20130621
+
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
 The following administration scripts are designed to be used from a SECURE
