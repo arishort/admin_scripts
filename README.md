@@ -1,5 +1,3 @@
--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
-
 LMS (Linux Management Server) Administration Scripts
 
  - maintain a (potentially self updating) inventory of your servers
