@@ -1,13 +1,14 @@
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
- LMS (Linux Management Server) Administration Scripts
+LMS (Linux Management Server) Administration Scripts
 
  - maintain a (potentially self updating) inventory of your servers
  - query server inventory to build reports
  - centrally control crontabs and RPM update schedules
  - create status reports and serve basic analytics via apache
 
- Author: Jon Short                    Date:   20130621
+Author: Jon Short
+Date:   20130621
 
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
