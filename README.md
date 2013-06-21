@@ -8,7 +8,6 @@ LMS (Linux Management Server) Administration Scripts
  - create status reports and serve basic analytics via apache
 
 Author: Jon Short
-Date:   20130621
 
 -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
 
