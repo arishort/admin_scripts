@@ -1,0 +1,13 @@
+The server list for the server script is a locally maintained flat file with the following attributes:
+
+server_name   : name of the server as you would connect to it with ssh
+server_class  : p for production, d for development, t for test
+server_group   : (a-e) as designated in your organization, if you don't have such a designation set them all to a
+patch_group   : (0-4) defines which major patch group the server belongs to, schedules are defined in cron-update
+patch_schedule: (1-4) defines which minor patch group the server belongs to, schedules are defined in cron-update
+
+The format is standard CSV:
+server_name,server_class,server_group,patch_group,patch_schedule
+
+Example entry:
+it-hrdatabase1,p,a,3,1

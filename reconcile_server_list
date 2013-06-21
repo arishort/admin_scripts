@@ -1,0 +1,68 @@
+#!/usr/bin/perl
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# reconcile_server_list.pl
+# - reconciles master server list with log directories
+# 
+# Author: Jon Short
+# Date:   20100106
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+use strict;
+use warnings;
+
+my @serverlist;
+my @logdir;
+my @diff;
+my @isect;
+my $item;
+my $diffitem;
+my %count;
+my %in_serverlist;
+my %in_logdir;
+
+@serverlist = `/usr/local/sbin/server -f`;
+chomp(@serverlist);
+undef %in_serverlist;
+for (@serverlist) { $in_serverlist{$_} = 1; }
+
+@logdir = `/usr/bin/find /logs/hosts/ -mindepth 1 -mtime -7 -type d -printf "%f\n"`;
+chomp(@logdir);
+undef %in_logdir;
+for (@logdir) { $in_logdir{$_} = 1; }
+
+@isect = ( );
+@diff  = ( );
+%count = ( );
+
+foreach $item (@serverlist, @logdir) { $count{$item}++;}
+
+foreach $item (keys %count) {
+    if ($count{$item} == 2) {
+        push @isect, $item;
+    } else {
+        push @diff, $item;
+    }
+}
+
+#print "\nServer List = @serverlist\n";
+#print "\nLog Directories = @logdir\n";
+#print "\nIntersect Array = @isect\n";
+#print "\nDiff Array = @diff\n";
+
+print "Server List Reconciliation Report\n\n";
+
+if (@diff == 0) {
+    print "server list and log directories match\n"
+}
+
+foreach $diffitem (@diff) {
+    if ($in_serverlist{$diffitem}) {
+        print "$diffitem missing from log directory\n"
+    } elsif ($in_logdir{$diffitem}) {
+        print "$diffitem missing from server list\n";
+        system("/usr/local/sbin/server", "-a", "$diffitem p x 0 1");
+        system("/usr/bin/scp -i /home/it-lms/.ssh/id_rsa it-lms\@$diffitem:/home/it-lms/verify_report.log /logs/reports/verify_install/$diffitem-verify_report.log");
+    }
+}
+
+exit 0;

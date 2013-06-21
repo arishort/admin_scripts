@@ -1,0 +1,162 @@
+#!/bin/bash
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# cron-update script 
+# - installs standard crontab entries on servers
+# - installs yum update/up2date crontab entries on servers
+# - requires RSA or DSA server keys on all servers
+# 
+# Author: Jon Short
+# Date:   20091105
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+if [ $# = 0 ]; then
+        echo "Syntax: cron-update <servername or all>"
+        exit 10
+fi
+
+# Set home to it-lms
+HOME="/home/it-lms"
+
+# List of linux servers maintained locally
+if [ "$1" = "all" ]; then
+        SERVERS=`server -l`
+else
+        SERVERS=`server -n $1`
+fi
+
+# Define standard crontab entries
+CVCRON="# restart Galaxy every Monday\n0 5 * * 1 /sbin/service Galaxy restart"
+
+LOGFILE="~/updatelog 2>&1"
+
+for server in $SERVERS ; do
+        echo -n "$server,"
+        # build the crontab entry for the individual server
+        # up2date or yum for package management
+        UP2DATE=`server -n $server -r "which up2date 2>/dev/null | wc -l"`
+        if [ "$UP2DATE" = 0 ]; then
+                # install downloadonly package if not installed
+                while [ "`server -n $server -r "rpm -qa" | grep -c yum.*downloadonly`" = 0 ]; do
+                        server -n $server -r "sudo yum -q -y install yum-downloadonly 2>/dev/null"
+                done
+                NOKERNEL="[ \`/usr/bin/yum check-update | grep -v \"devel\|docs\|utils\|headers\" | grep -c kernel\` = 0 ]"
+                UPDATECMD="/usr/bin/yum update -y"
+                KERNELCMD="/usr/bin/yum update -y && /usr/bin/yum install kernel* -y && /sbin/reboot"
+                NOSKERNEL="[ \`find /var/cache/yum -name \"kernel*\" | wc -l\` = 0 ]"
+                DLCMD="yum update --downloadonly --downloaddir=/var/cache/yum -y"
+                INSTCMD="/usr/bin/yum install /var/cache/yum/*.rpm -y"
+                CLEARCMD="/bin/rm -f /var/cache/yum/*.rpm"
+                COMMENT1="# automated patch schedule - yum update"
+        else
+                NOKERNEL="[ \`/usr/sbin/up2date -l | grep -v \"devel\|docs\|utils\|headers\" | grep -c kernel\` = 0 ]"
+                UPDATECMD="/usr/sbin/up2date -u"
+                KERNELCMD="/usr/sbin/up2date -u && /usr/sbin/up2date -u -f kernel* && /sbin/reboot"
+                NOSKERNEL="[ \`find /var/spool/up2date -name \"kernel*\" | grep -v \"devel\|docs\|utils\|headers\" | wc -l\` = 0 ]"
+                DLCMD="/usr/sbin/up2date -u -f --download"
+                INSTCMD="/usr/sbin/up2date -u -f --install"
+                CLEARCMD="/bin/rm -f /var/spool/up2date/*.rpm /var/spool/up2date/*.hdr"
+                COMMENT1="# automated patch schedule - up2date"
+fi
+        # set schedule variable for installation of updates
+        SCHEDULE=`server -v -n $server | cut -f 5 -d ","`
+        if   [ "$SCHEDULE" = 1 ]; then INSTTIME="0 3 * * 0"
+        elif [ "$SCHEDULE" = 2 ]; then INSTTIME="15 3 * * 0"
+        elif [ "$SCHEDULE" = 3 ]; then INSTTIME="30 3 * * 0"
+        elif [ "$SCHEDULE" = 4 ]; then INSTTIME="45 3 * * 0"
+        fi
+
+        # set date range for performing downloads on 1st Sunday
+        DLRANGE="[ \`/bin/date +\%d\` -le 7 ]"
+        # change download to 2nd Sunday
+        #DLRANGE="[ \`/bin/date +\%d\` -ge 8 -a \`/bin/date +\%d\` -le 14 ]"
+
+        # set patch group variables for crontab
+        PATCHGROUP=`server -v -n $server | cut -f 4 -d ","`
+
+        # PATCHGROUP 0 - downloads updates on the 1st Sunday of each month, no install
+        if   [ "$PATCHGROUP" = 0 ]; then
+                if   [ "$SCHEDULE" = 1 ]; then DLTIME="0 4 * * 0"
+                elif [ "$SCHEDULE" = 2 ]; then DLTIME="15 4 * * 0"
+                elif [ "$SCHEDULE" = 3 ]; then DLTIME="30 4 * * 0"
+                elif [ "$SCHEDULE" = 4 ]; then DLTIME="45 4 * * 0"
+                fi
+                COMMENT2="download only on the first Sunday of each month"
+                # change to second Sunday
+                #COMMENT2="download only on the second Sunday of each month"
+                NEWCRON="$COMMENT1 $COMMENT2\n$DLTIME if $DLRANGE;then $CLEARCMD && $DLCMD;fi > $LOGFILE"
+
+        # PATCHGROUP 1 - download and install updates on the 1st Sunday of each month
+        elif [ "$PATCHGROUP" = 1 ]; then
+                COMMENT2="on the first Sunday of each month"
+                # change to second Sunday
+                #COMMENT2="on the second Sunday of each month"
+                NEWCRON="$COMMENT1 $COMMENT2\n$INSTTIME if $DLRANGE;then if $NOKERNEL;then $UPDATECMD;else $KERNELCMD;fi;fi > $LOGFILE"
+
+        # PATCHGROUP 2 - download updates on the 1st Sunday of each month, install on 2nd
+        elif [ "$PATCHGROUP" = 2 ]; then
+                if   [ "$SCHEDULE" = 1 ]; then DLTIME="0 5 * * 0"
+                elif [ "$SCHEDULE" = 2 ]; then DLTIME="15 5 * * 0"
+                elif [ "$SCHEDULE" = 3 ]; then DLTIME="30 5 * * 0"
+                elif [ "$SCHEDULE" = 4 ]; then DLTIME="45 5 * * 0"
+                fi
+                # uncomment to install updates on 2nd Sunday
+                INSTRANGE="[ \`/bin/date +\%d\` -ge 8 -a \`/bin/date +\%d\` -le 14 ]"
+                # uncomment to install updates on 3rd Sunday
+                #INSTRANGE="[ \`/bin/date +\%d\` -ge 15 -a \`/bin/date +\%d\` -le 21 ]"
+                COMMENT2="on the second Sunday of each month"
+                NEWCRON="$COMMENT1 $COMMENT2\n$DLTIME if $DLRANGE;then $DLCMD;fi > $LOGFILE\n$INSTTIME if $INSTRANGE;then if $NOSKERNEL;then $INSTCMD && $CLEARCMD;else $INSTCMD && $CLEARCMD && /sbin/reboot;fi;fi >> $LOGFILE"
+
+        # PATCHGROUP 3 - download updates on the 1st Sunday of each month, install on 3rd
+        elif [ "$PATCHGROUP" = 3 ]; then
+                if   [ "$SCHEDULE" = 1 ]; then DLTIME="0 2 * * 0"
+                elif [ "$SCHEDULE" = 2 ]; then DLTIME="15 2 * * 0"
+                elif [ "$SCHEDULE" = 3 ]; then DLTIME="30 2 * * 0"
+                elif [ "$SCHEDULE" = 4 ]; then DLTIME="45 2 * * 0"
+                fi
+                # uncomment to install updates on 2nd Sunday
+                #INSTRANGE="[ \`/bin/date +\%d\` -ge 8 -a \`/bin/date +\%d\` -le 14 ]"
+                # uncomment to install updates on 3rd Sunday
+                INSTRANGE="[ \`/bin/date +\%d\` -ge 15 -a \`/bin/date +\%d\` -le 21 ]"
+                # uncomment to install updates on 4th Sunday
+                #INSTRANGE="[ \`/bin/date +\%d\` -ge 22 -a \`/bin/date +\%d\` -le 28 ]"
+                COMMENT2="on the third Sunday of each month"
+                NEWCRON="$COMMENT1 $COMMENT2\n$DLTIME if $DLRANGE;then $DLCMD;fi > $LOGFILE\n$INSTTIME if $INSTRANGE;then if $NOSKERNEL;then $INSTCMD && $CLEARCMD;else $INSTCMD && $CLEARCMD && /sbin/reboot;fi;fi >> $LOGFILE"
+
+        # PATCHGROUP 4 - download updates on the 1st Sunday of each month, install on 4th
+        elif [ "$PATCHGROUP" = 4 ]; then
+                if   [ "$SCHEDULE" = 1 ]; then DLTIME="0 1 * * 0"
+                elif [ "$SCHEDULE" = 2 ]; then DLTIME="15 1 * * 0"
+                elif [ "$SCHEDULE" = 3 ]; then DLTIME="30 1 * * 0"
+                elif [ "$SCHEDULE" = 4 ]; then DLTIME="45 1 * * 0"
+                fi
+                INSTRANGE="[ \`/bin/date +\%d\` -ge 22 -a \`/bin/date +\%d\` -le 28 ]"
+                COMMENT2="on the fourth Sunday of each month"
+                NEWCRON="$COMMENT1 $COMMENT2\n$DLTIME if $DLRANGE;then $DLCMD;fi > $LOGFILE\n$INSTTIME if $INSTRANGE;then if $NOSKERNEL;then $INSTCMD && $CLEARCMD;else $INSTCMD && $CLEARCMD && /sbin/reboot;fi;fi >> $LOGFILE"
+
+        # PATCHGROUP 5 - download updates on the 1st Sunday of each month, install on 3rd with no reboot
+        elif [ "$PATCHGROUP" = 5 ]; then
+                if   [ "$SCHEDULE" = 1 ]; then DLTIME="0 0 * * 0"
+                elif [ "$SCHEDULE" = 2 ]; then DLTIME="15 0 * * 0"
+                elif [ "$SCHEDULE" = 3 ]; then DLTIME="30 0 * * 0"
+                elif [ "$SCHEDULE" = 4 ]; then DLTIME="45 0 * * 0"
+                fi
+                # uncomment to install updates on 3rd Sunday
+                INSTRANGE="[ \`/bin/date +\%d\` -ge 15 -a \`/bin/date +\%d\` -le 21 ]"
+                COMMENT2="on the third Sunday of each month with no reboot"
+                NEWCRON="$COMMENT1 $COMMENT2\n$DLTIME if $DLRANGE;then $DLCMD;fi > $LOGFILE\n$INSTTIME if $INSTRANGE;then $INSTCMD && $CLEARCMD;fi >> $LOGFILE"
+
+        elif [ "$PATCHGROUP" = 9 ]; then
+                COMMENT2="disabled - OS version no longer supported"
+                NEWCRON="$COMMENT1 $COMMENT2"
+
+        else echo "patch group $PATCHGROUP out of scope"; break
+        fi
+
+        # copy existing crontab removing any existing yum or up2date entries
+        server -n $server -r "sudo crontab -l 2>/dev/null | grep -v 'yum update\|yum install\|up2date\|Galaxy' > ~/newcron"
+        # build new crontab entry
+        ssh -q -l it-lms -i /home/it-lms/.ssh/id_rsa $server "echo -e '$CVCRON\n$NEWCRON' >> ~/newcron"
+        # put new crontab in place and clean up temp file
+        server -n $server -r "sudo sh -c \"cat /home/it-lms/newcron | crontab - && rm /home/it-lms/newcron\""
+        echo "schedule $PATCHGROUP"
+done

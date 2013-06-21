@@ -1,0 +1,36 @@
+#!/bin/bash
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# chklogin script 
+# - checks for successful login for servers on the local server list
+# - requires RSA or DSA server keys on all servers
+# 
+# Author: Jon Short
+# Date:   20080929
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# Set username to perform logins
+username=
+
+# List of linux servers maintained locally
+
+SERVERS=`server -l`
+echo -ne "Performing login check\n["
+
+for server in $SERVERS ; do
+	TEST=`ssh -o ConnectTimeout=2 -q -l $username $server echo 'connected' | grep -c 'connected'`
+	if [ $TEST = 1 ];then
+		echo -ne "\E[32m." & tput sgr0
+		#echo -e "$server\r\t\t\t\t\E[32m[OK]" & tput sgr0
+	else
+		echo -ne "\E[31m." & tput sgr0
+		echo $server >> /tmp/chklogin-failed
+		#echo -e "\n$server\r\t\t\t\t\E[31m[FAIL]" & tput sgr0
+	fi
+done
+
+echo -ne "]\n\n"
+
+if [ -f /tmp/chklogin-failed ]; then
+	echo -e "Failed Logins\n-------------"
+	cat /tmp/chklogin-failed
+	rm /tmp/chklogin-failed
+fi

@@ -1,0 +1,258 @@
+#!/bin/bash
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# server script
+# - queries and controls the local server list
+#
+# Author: Jon Short
+# Date:   20091102
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+if [ $# -eq 0 ];then
+        echo -e "Usage: server -[switch1] [option1] -[switch2] [OPTION2]...\n"
+        echo -e "Valid Arguments:\n"
+        echo -e "   -l                  list server names only"
+        echo -e "   -v                  list verbose server info rather than just names"
+        echo -e "   -f                  full server list, ignores exclude list"
+        echo -e "   -s [search-string]  list only server names matching pattern"
+        echo -e "   -n [servername]     list only server specified by exact name"
+        echo -e "   -c [p,t]            list only servers with matching class"
+        echo -e "   -g [a,b,c,d,e,x]    list only servers in specified server group"
+        echo -e "   -p [0,1,2,3,4,5,9]  list only servers in specified patch group"
+        echo -e "   -r \"[command]\"    run command inside quotes on servers"
+        echo -e "   -a [servername]     add a new server, incompatible with other options"
+        echo -e "                       optional: \"[name] [p/t] [group] [patch] [schedule]\""
+        echo -e "   -d [servername]     remove a server, incompatible with other options\n"
+        exit 0
+fi
+
+HOME=/home/it-lms
+
+# baseline variables
+c_arg="*"
+g_arg="*"
+p_arg="*"
+
+while getopts ":lvfs:n:c:g:p:r:a:d:" Option
+do
+  case $Option in
+    l ) l_flag=1;;
+    v ) v_flag=1;;
+    f ) f_flag=1;;
+    s ) # search by name
+        l_flag=1;s_flag=1; s_arg="$OPTARG"
+    ;;
+    n ) # exact name
+        l_flag=1;s_flag=1; s_arg="^$OPTARG,"
+    ;;
+    c ) # class list
+        l_flag=1;c_flag=1; c_arg="$OPTARG"
+        classcheck=`echo $c_arg | cut -c 1 | grep -c "p\|t"`
+        if [ "$classcheck" != 1 ];then
+                echo "Invalid class, exiting (valid options: p,t)"
+                exit 10
+        fi
+    ;;
+    g ) # group list
+        l_flag=1;g_flag=1; g_arg="$OPTARG"
+        groupcheck=`echo $g_arg | cut -c 1 | grep -c "a\|b\|c\|d\|e\|x"`
+        if [ "$groupcheck" != 1 ];then
+                echo "Invalid server group, exiting (valid options: a,b,c,d,e,x)"
+                exit 10
+        fi
+    ;;
+    p ) # patch list
+        l_flag=1;p_flag=1; p_arg="$OPTARG"
+        patchcheck=`echo $p_arg | cut -c 1 | grep -c "0\|1\|2\|3\|4\|5\|9"`
+        if [ "$patchcheck" != 1 ];then
+                echo "Invalid patch group, exiting (valid options: 0,1,2,3,4,5,9)"
+                exit 10
+        fi
+    ;;
+    r ) # run command on servers
+        l_flag=0;v_flag=0;r_flag=1;r_arg="$OPTARG"
+    ;;
+    a ) # server add
+        a_flag=1; a_arg="$OPTARG"
+    ;;
+    d ) # server delete
+        d_flag=1; d_arg="$OPTARG"
+    ;;
+    * ) echo "$Option switch not recognized";;
+        esac
+done
+
+# enforce flag exclusivity
+if [ "$a_flag" = 1 -a "$l_flag" = 1 ] || [ "$a_flag" = 1 -a "$v_flag" = 1 ] || [ "$a_flag" = 1 -a "$s_flag" = 1 ] || [ "$a_flag" = 1 -a "$n_flag" = 1 ] || [ "$a_flag" = 1 -a "$c_flag" = 1 ] || [ "$a_flag" = 1 -a "$g_flag" = 1 ] || [ "$a_flag" = 1 -a "$p_flag" = 1 ] || [ "$a_flag" = 1 -a "$d_flag" = 1 ];then
+        echo "flag conflict: -a is exclusive";exit 10;fi
+if [ "$d_flag" = 1 -a "$l_flag" = 1 ] || [ "$d_flag" = 1 -a "$v_flag" = 1 ] || [ "$d_flag" = 1 -a "$s_flag" = 1 ] || [ "$d_flag" = 1 -a "$n_flag" = 1 ] || [ "$d_flag" = 1 -a "$c_flag" = 1 ] || [ "$d_flag" = 1 -a "$g_flag" = 1 ] || [ "$d_flag" = 1 -a "$p_flag" = 1 ];then
+        echo "flag conflict: -d is exclusive";exit 10;fi
+
+
+
+# verbose listing
+if   [ "$v_flag" = 1 ];then
+        SERVERS=`cat ~/servers/linux-server-list | grep -v -f ~/servers/exclude | grep "$s_arg" | grep ",$c_arg," | grep ",$g_arg," | grep ",$p_arg,"`
+        for server in $SERVERS; do
+                echo $server
+        done
+# normal listing
+elif [ "$l_flag" = 1 ];then
+        SERVERS=`cat ~/servers/linux-server-list | grep -v -f ~/servers/exclude | grep "$s_arg" | grep ",$c_arg," | grep ",$g_arg," | grep ",$p_arg," | cut -f 1 -d ","`
+        for server in $SERVERS; do
+                echo $server
+        done
+# full listing
+elif [ "$f_flag" = 1 ];then
+        SERVERS=`cat ~/servers/linux-server-list | grep "$s_arg" | grep ",$c_arg," | grep ",$g_arg," | grep ",$p_arg," | cut -f 1 -d ","`
+        for server in $SERVERS; do
+                echo $server
+        done
+# run command
+elif [ "$r_flag" = 1 ];then
+        # Prompt for the utility account password:
+        echo -n "Please enter the utility account password:"
+        read -s PASS
+        echo -e "\n"
+
+        SERVERS=`cat ~/servers/linux-server-list | grep -v -f ~/servers/exclude | grep "$s_arg" | grep ",$c_arg," | grep ",$g_arg," | grep ",$p_arg," | cut -f 1 -d ","`
+        CMD=`echo $r_arg | sed -e "s/^sudo/echo\ $PASS \| sudo -S/g"`
+        ELEMENTS=`echo $SERVERS | wc -w`
+        if [ "$ELEMENTS" = 1 ];then
+                server=$SERVERS
+                ## Comment the dev null, and put in echo for debug, here.
+                # echo $CMD
+                ## Try `unset noglob` which is equivalent of `set -f`
+                # CMD = "set -f; $CMD"
+                TEST=`ssh -q -l it-lms -i /home/it-lms/.ssh/id_rsa -o ConnectTimeout=2 $server echo 'connected' | grep -c 'connected'`
+                if [ $TEST = 1 ];then
+                        ssh -q -l it-lms -i /home/it-lms/.ssh/id_rsa $server "$CMD" 2>/dev/null
+                else
+                        echo "connection failed to $server"
+                fi
+        else
+        for server in $SERVERS; do
+                # test server connection before continuing
+                TEST=`ssh -q -l it-lms -i /home/it-lms/.ssh/id_rsa -o ConnectTimeout=2 $server echo 'connected' | grep -c 'connected'`
+                if [ $TEST = 1 ];then
+                        echo -n "$server, "
+                        ssh -q -l it-lms -i /home/it-lms/.ssh/id_rsa $server "$CMD" 2>/dev/null
+                fi
+        done
+        fi
+fi
+
+# add section prompts for server name, class, patch group, and patch schedule and adds to list
+if [ "$a_flag" = 1 ];then
+        declare -a A_ARGS
+        A_ARGS=( $a_arg )
+        if [ ${#A_ARGS[@]} -eq 1 ];then
+        verify="n"
+        while [ "$verify" != y ]; do
+                NEWSERVER=$a_arg
+                namecheck=`cat ~/servers/linux-server-list | grep -c $NEWSERVER,`
+                if [ "$namecheck" != 0 ];then
+                        echo "Server name already exists, exiting"
+                        exit 10
+                fi
+                classcheck=0
+                while [ "$classcheck" != 1 ]; do
+                        echo -n "Production or Test (p,t): "
+                        read NEWCLASS
+                        classcheck=`echo $NEWCLASS | cut -c 1 | grep -c "p\|t"`
+                done
+                groupcheck=0
+                while [ "$groupcheck" != 1 ]; do
+                        echo -n "Server Group (a,b,c,d,e,x): "
+                        read NEWGROUP
+                        groupcheck=`echo $NEWGROUP | cut -c 1 | grep -c "a\|b\|c\|d\|e\|x"`
+                done
+                patchcheck=0
+                while [ "$patchcheck" != 1 ]; do
+                        echo -n "Patch Group (0,1,2,3,4,5,9): "
+                        read NEWPATCH
+                        patchcheck=`echo $NEWPATCH | cut -c 1 | grep -c "0\|1\|2\|3\|4\|5\|9"`
+                done
+                schedulecheck=0
+                while [ "$schedulecheck" != 1 ]; do
+                        echo -n "Patch Schedule (1,2,3,4): "
+                        read NEWSCHEDULE
+                        schedulecheck=`echo $NEWSCHEDULE | cut -c 1 | grep -c "1\|2\|3\|4"`
+                done
+                echo "Server Name:      $NEWSERVER"
+                echo "Server Class:     $NEWCLASS"
+                echo "Server Group:     $NEWGROUP"
+                echo "Patch Group:      $NEWPATCH"
+                echo "Patch Schedule:   $NEWSCHEDULE"
+                echo -n "Is this correct? (y/n): "
+                read verify
+        done
+        elif [ ${#A_ARGS[@]} -eq 5 ];then
+                NEWSERVER=${A_ARGS[0]}
+                NEWCLASS=${A_ARGS[1]}
+                NEWGROUP=${A_ARGS[2]}
+                NEWPATCH=${A_ARGS[3]}
+                NEWSCHEDULE=${A_ARGS[4]}
+                namecheck=`cat ~/servers/linux-server-list | grep -c $NEWSERVER,`
+                if [ "$namecheck" != 0 ];then
+                        echo "Server name already exists, exiting"
+                        exit 10
+                fi
+                classcheck=`echo $NEWCLASS | cut -c 1 | grep -c "p\|t"`
+                if [ "$classcheck" != 1 ];then
+                        echo "Invalid server class - valid choices: (p,t)"
+                        exit 10
+                fi
+                groupcheck=`echo $NEWGROUP | cut -c 1 | grep -c "a\|b\|c\|d\|x"`
+                if [ "$groupcheck" != 1 ];then
+                        echo "Invalid Server Group - valid choices: (a,b,c,d,x)"
+                        exit 10
+                fi
+                patchcheck=`echo $NEWPATCH | cut -c 1 | grep -c "0\|1\|2\|3\|4\|5\|9"`
+                if [ "$patchcheck" != 1 ];then
+                        echo "Invalid Patch Group - valid choices: (0,1,2,3,4,5,9)"
+                        exit 10
+                fi
+                schedulecheck=`echo $NEWSCHEDULE | cut -c 1 | grep -c "1\|2\|3\|4"`
+                if [ "$schedulecheck" != 1 ];then
+                        echo "Invalid Patch Schedule - valid choices: (1,2,3,4)"
+                        exit 10
+                fi
+        fi
+        mv ~/servers/linux-server-list ~/servers/linux-server-list.new
+        echo $NEWSERVER,$NEWCLASS,$NEWGROUP,$NEWPATCH,$NEWSCHEDULE >> ~/servers/linux-server-list.new
+        cat ~/servers/linux-server-list.new | sort > ~/servers/linux-server-list
+        rm ~/servers/linux-server-list.new
+        echo "$NEWSERVER successfully added to server list"
+        exit 0
+fi
+
+# delete section prompts for server name, errors if invalid or duplicate values exist
+if [ "$d_flag" = 1 ];then
+        DELSERVER=$d_arg
+        if [ `cat ~/servers/linux-server-list | grep "^$DELSERVER" | wc -l` != 1 ]
+                then echo "server not in list or dupliate entry exists, edit manually"
+                exit 10
+        fi
+        verifycheck=0
+        while [ "$verifycheck" != 1 ]; do
+                echo -n "Remove $DELSERVER from the server list? (y/n): "
+                read verify
+                verifycheck=`echo $verify | cut -c 1 | grep -c "y\|n"`
+        done
+        if [ "$verify" = y ]; then
+                mv ~/servers/linux-server-list ~/servers/linux-server-list.new
+                mv ~/servers/exclude ~/servers/exclude.new
+                cat ~/servers/linux-server-list.new | grep -v "^$DELSERVER" > ~/servers/linux-server-list
+                cat ~/servers/exclude.new | grep -v "^\^$DELSERVER" > ~/servers/exclude
+                rm ~/servers/linux-server-list.new
+                rm ~/servers/exclude.new
+                if [ -d /logs/hosts/$DELSERVER ]; then
+                        rm -rf /logs/hosts/$DELSERVER
+                fi
+                echo "Server successfully deleted"
+                exit 0
+        else
+                exit 0
+        fi
+fi
+

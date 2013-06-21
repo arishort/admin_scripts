@@ -1,0 +1,67 @@
+#!/bin/bash
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# updatestatus script 
+# - pulls various info about servers on the local server list
+# - requires RSA or DSA server keys on all servers
+# 
+# Author: Jon Short
+# Date:   20080912
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+if [ $# = 0 ]; then
+        echo "Syntax: updatestatus <servername, patchgroup #, or all>"
+        exit 10
+fi
+
+# List of linux servers maintained locally
+if [ "$1" = "all" ]; then
+        echo -e "All Servers Report\n"
+	PATCHGROUPS="0 1 2 3 4"
+
+elif [ "`echo $1 | grep -c '^[0-9]'`" = 1 ]; then
+	PATCHGROUP=`server -p $1`
+	echo -e "\nPatch Group $1: server,group,last-reboot,last-update\n-=-=-=-=-=-=-=-=-"
+	for server in $PATCHGROUP ; do
+		CONNECT="ssh -q -l sujws $server"
+		# get server group
+		GROUP=`server -v -n $server | cut -f 3 -d ","`
+		UPTEPOCH=`$CONNECT cat /proc/uptime | cut -d "." -f 1`
+		UPT=`date -d "-$UPTEPOCH sec" +%Y-%m-%d`
+		# determine when updates were last done
+		U2DEPOCH=`$CONNECT "rpm -qa --qf '%{INSTALLTIME}\n' | sort -nr | head -1"`
+		U2D=`date -d "1970-01-01 $U2DEPOCH sec" +%Y-%m-%d`
+		echo -e "$server,$GROUP,$UPT,$U2D"
+	done
+	exit 0
+else
+	server=$1
+	CONNECT="ssh -q -l sujws $server"
+	# get server group
+	GROUP=`server -v -n $server | cut -f 3 -d ","`
+	# get machine uptime
+	UPTEPOCH=`$CONNECT cat /proc/uptime | cut -d "." -f 1`
+	UPT=`date -d "-$UPTEPOCH sec" +%Y-%m-%d`
+	# determine when updates were last done
+	U2DEPOCH=`$CONNECT "rpm -qa --qf '%{INSTALLTIME}\n' | sort -nr | head -1"`
+	U2D=`date -d "1970-01-01 $U2DEPOCH sec" +%Y-%m-%d`
+	echo -e "$server,$GROUP,$UPT,$U2D"
+	exit 0
+fi
+
+for group in $PATCHGROUPS ; do
+	PATCHGROUP=`server -p $group`
+	echo -e "\nPatch Group $group: server,group,last-reboot,last-update\n-=-=-=-=-=-=-=-=-"
+	for server in $PATCHGROUP ; do
+		CONNECT="ssh -q -l sujws $server"
+		# get server group
+		GROUP=`server -v -n $server | cut -f 3 -d ","`
+		# get machine uptime
+		UPTEPOCH=`$CONNECT cat /proc/uptime | cut -d "." -f 1`
+		UPT=`date -d "-$UPTEPOCH sec" +%Y-%m-%d`
+		# determine when updates were last done
+		U2DEPOCH=`$CONNECT "rpm -qa --qf '%{INSTALLTIME}\n' | sort -nr | head -1"`
+		U2D=`date -d "1970-01-01 $U2DEPOCH sec" +%Y-%m-%d`
+		echo -e "$server,$GROUP,$UPT,$U2D"
+	done
+done
+exit 0

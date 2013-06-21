@@ -1,0 +1,77 @@
+#!/bin/bash
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# kernelpurge script
+# - removes old kernels from a server
+# 
+# Author: Jon Short
+# Date:   20100609
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+if [ $# = 0 ]; then
+   echo "Syntax: kernelpurge <servername>"
+   exit 10
+fi
+
+server=$1
+
+endstring=`/usr/local/sbin/server -n $server -r "uname -r | awk -F'.' '{ print \\$NF }'"`
+KRNtype=`/usr/local/sbin/server -n $server -r "uname -r | grep -io 'xen\|xenU\|smp\|pae' | sed -e 's/^/-/g'"`
+
+if [ "`echo $endstring | grep -c el5`" = 1 ]; then
+   EL="el5"
+elif [ "`echo $endstring | grep -c EL`" = 1 ]; then
+   EL="EL"
+fi
+
+# get running kernel version and apply standard format
+KRNV=`/usr/local/sbin/server -n $server -r "uname -r | sed -e 's/$endstring//g'" | sed -e 's/\.$//'`
+# get highest installed kernel version and apply standard format
+KRNI=`/usr/local/sbin/server -n $server -r "rpm -q kernel$KRNtype --last | head -1 | cut -f 1 -d ' ' | sed -e 's/$EL//g' -e 's/kernel$KRNtype-//g' -e 's/ //g' -e 's/^--//g' -e 's/^-//g' -e 's/\.$//'"`
+
+KERNLST=( "`/usr/local/sbin/server -n $server -r \"rpm -qa | grep kernel | grep -v 'devel\|docs\|utils\|headers'\"`" )
+
+echo "Server Name          : $server"
+echo "Active Running Kernel: $KRNV"
+echo "Most Current Kernel  : $KRNI"
+echo -e "------"
+
+for kernel in $KERNLST; do
+   if [ "`echo $kernel | grep -c \"$KRNV\|$KRNI\"`" = "0" ];then
+      kremove[${#kremove[*]}]="$kernel"
+   else
+      kkeep[${#kkeep[*]}]="$kernel"
+   fi
+done
+
+echo "Kernels to remove:  ${#kremove[*]}"
+echo "Kernels to keep  :  ${#kkeep[*]}"
+echo -e "------\nKeep List:\n------"
+   for kernel in ${kkeep[@]}; do
+      echo $kernel
+   done
+
+echo -en "------\nShow full list of kernels marked for removal? (y/n): "
+read RESPONSE1
+
+if [ "$RESPONSE1" = y ] ; then
+   echo -e "\nRemove List:\n-----"
+   for kernel in ${kremove[@]}; do
+      echo $kernel
+   done
+else
+   echo -n
+fi
+
+echo -en "\nWould you like to proceed with the kernel purge (y/n): "
+read RESPONSE2
+
+if [ "$RESPONSE2" = y ] ; then
+   for kernel in ${kremove[@]}; do
+      /usr/local/sbin/server -n $server -r "sudo rpm -e $kernel"
+   done
+elif [ "$RESPONSE2" = n ] ; then
+   echo "Exiting"
+else
+   echo "Invalid selection, Exiting"    
+   exit 10
+fi

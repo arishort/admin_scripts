@@ -1,0 +1,62 @@
+body {
+  background: #fff;
+}
+
+table.pretty {
+  margin: 1em 1em 1em 1em;
+  background: #eee;
+  border-collapse: collapse;
+}
+table.pretty th, table.pretty td {
+  border: 1px silver solid;
+  padding: 0.2em;
+}
+table.pretty th {
+  background: #ccc;
+  text-align: left;
+  font-weight: normal;
+}
+table.pretty caption {
+  margin-left: inherit;
+  margin-right: inherit;
+}
+
+.odd {
+  background: #ddd;
+}
+
+#list {
+  background: #fff;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+#sidebar {
+  background-color:#fff;
+  height:99%; 
+  width:220px;
+  float:left;
+  margin: 0;
+  padding: 0;
+}
+
+#sidebar iframe {
+  background: #fff;
+  margin: 0;
+  padding: 0;
+  width: 220px;
+  height: 90%;
+}
+
+#content {
+  background-color: #fff;
+  height:99%;
+  margin-left:220px;
+  overflow:auto;
+}
+
+#content iframe {
+  width: 100%;
+  height: 98%;
+}  

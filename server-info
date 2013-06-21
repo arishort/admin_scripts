@@ -1,0 +1,82 @@
+#!/bin/bash
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+# server-info script 
+# - pulls various info about servers on the local server list
+# - requires RSA or DSA server keys on all servers
+# 
+# Author: Jon Short
+# Date:   20110613
+# -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+
+if [ $# = 0 ]; then
+        echo "Syntax: server-info <servername or all>"
+        exit 10
+fi
+
+# List of linux servers maintained locally
+if [ "$1" = "all" ]; then
+        SERVERS=`/usr/local/sbin/server -l`
+        echo -e "server,uptime,kernel,glibc,up2date,rhn,release,fwall,fw-log,powerpath"; else
+        SERVERS=`/usr/local/sbin/server -l -n $1`
+fi
+
+# Prompt for the utility account password:
+echo -n "Please enter the utility account password:"
+read -s PASS
+echo -e "\n"
+
+for server in $SERVERS ; do
+        CONNECT="ssh -q -l it-lms -i /home/it-lms/.ssh/id_rsa $server"
+        # establish what type of kernel is running
+        KRNtype=`$CONNECT uname -r | grep -io 'xen\|xenU\|smp\|pae' | sed -e 's/^/-/g'`
+        # get running kernel version and apply standard format
+        KRNV=`$CONNECT uname -r | sed -e 's/[Aa-Zz]//g' -e 's/\.$//'`
+        # get highest installed kernel version and apply standard format
+        KRNI=`$CONNECT rpm -q kernel$KRNtype --last | head -1 | cut -f 1 -d ' ' | sed -e 's/[Aa-Zz]//g' -e 's/ //g' -e 's/^--//g' -e 's/^-//g' -e 's/\.$//'`
+        # get running glibc version and apply standard format
+        GLCV=`$CONNECT "getconf GNU_LIBC_VERSION | cut -f 2 -d ' '"`
+        # get highest installed glibc version and apply standard format
+        GLCI=`$CONNECT "rpm -q glibc | tail -1 | cut -f 2 -d '-'"`
+        # get redhat-release
+        RHR=`$CONNECT "grep -o 'release .' /etc/redhat-release | cut -d ' ' -f 2"`
+        # determine when updates were last done
+        U2DEPOCH=`$CONNECT "rpm -qa --qf '%{INSTALLTIME}\n' | sort -nr | head -1"`
+        U2D=`date -d "1970-01-01 $U2DEPOCH sec" +%Y-%m-%d`
+        # get machine uptime
+        UPTI=`$CONNECT "uptime | cut -f 1 -d ',' | cut -f 2 -d 'p' | sed -e 's/^ //g' -e 's/ $//g'"`
+        if [ "`echo $UPTI | grep -c days`" = 0 ]; then UPT="<1 day"; else UPT=$UPTI;fi
+        # compare standard format kernel versions to see if most recent version is running
+        if [ "$KRNV" != "$KRNI" ]; then KRN="$KRNV->$KRNI"; else KRN="updated"; fi
+        # compare standard format glibc versions to see if most recent version is running
+        if [ "$GLCV" != "$GLCI" ]; then GLC="GLIBC $GLCV -> $GLCI"; else GLC="updated"; fi
+        # determine whether server is updating against the rhn satellite or redhat
+        RHN=`$CONNECT "echo $PASS | sudo -S cat /etc/sysconfig/rhn/up2date 2>/dev/null | grep serverURL=https | cut -f 3 -d '/' | grep -o 'rhn.jmu.edu\|rhn.redhat.com\|it-rhn1.jmu.edu'"`
+        # check if there are any ACCEPT firewall rules currently in place
+        if [ `ssh -q -l it-lms -i /home/it-lms/.ssh/id_rsa $server "echo $PASS | sudo -S /sbin/iptables -L 2>/dev/null | grep ACCEPT | grep -v Chain" | wc -l` -gt 0 ]
+            then FW="FW"
+            else FW="NO_FW"
+        fi
+        # check if there are any LOG firewall rules currently in place
+        if [ `ssh -q -l it-lms -i /home/it-lms/.ssh/id_rsa $server "echo $PASS | sudo -S /sbin/iptables -L 2>/dev/null | grep LOG" | wc -l` -gt 0 ]
+            then FWL="LOGGING"
+            else FWL="NO_LOG"
+        fi
+        # determine if powerpath is installed and version
+        PMTI=`$CONNECT "if test -f /sbin/powermt; then echo 1; else echo 0; fi"`
+        if [ $PMTI != 0 ]; then
+                PMTV=`$CONNECT /sbin/powermt version | cut -f 7 -d " "`; else
+                PMTV="N/A"
+        fi
+        # pretty output for single server
+        if [ $1 != all ]; then
+                if [ `echo $server|wc -m` -lt 9 ]; then
+                        echo -e "server\t\tuptime\tkernel\tglibc\tup2date\t\trhn\trelease\tfwall\tfw-log\tpowerpath"
+                        echo -e "$server\t\t$UPT\t$KRN\t$GLC\t$U2D\t$RHN\t$RHR\t$FW\t$FWL\t$PMTV"; else
+                        echo -e "server\t\tuptime\tkernel\tglibc\tup2date\t\trhn\trelease\tfwall\tfw-log\tpowerpath"
+                        echo -e "$server\t$UPT\t$KRN\t$GLC\t$U2D\t$RHN\t$RHR\t$FW\t$FWL\t$PMTV"
+                fi
+
+        else
+        echo -e "$server,$UPT,$KRN,$GLC,$U2D,$RHN,$RHR,$FW,$FWL,$PMTV"
+        fi
+done
