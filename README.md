@@ -27,8 +27,8 @@ Default locations: (can be altered in the scripts to fit your environment)
 - location of centralized server logs: /logs/hosts/<server_name>
 
 Installation:
-extract all files into /home/it-lms/servers/
-create a symbolic link from /usr/share/ to /home/it-lms/servers/server
-create /home/it-lms/servers/linux-server-list
-create an SSH key pair for it-lms 
-sh /home/it-lms/servers/server -a "hostname" to add servers to the inventory
+- extract all files into /home/it-lms/servers/
+- create a symbolic link from /usr/share/ to /home/it-lms/servers/server
+- create /home/it-lms/servers/linux-server-list
+- create an SSH key pair for it-lms 
+- sh /home/it-lms/servers/server -a "hostname" to add servers to the inventory
